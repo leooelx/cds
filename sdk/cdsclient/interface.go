@@ -541,6 +541,15 @@ func WithKeys() RequestModifier {
 	}
 }
 
+// WithDeepPipelines allows to get pipelines details on a workflow.
+func WithDeepPipelines() RequestModifier {
+	return func(r *http.Request) {
+		q := r.URL.Query()
+		q.Set("withDeepPipelines", "true")
+		r.URL.RawQuery = q.Encode()
+	}
+}
+
 // WithTemplate allow a provider to retrieve a workflow with template if exists.
 func WithTemplate() RequestModifier {
 	return func(r *http.Request) {
