@@ -2,6 +2,7 @@ package workflowv3
 
 import (
 	"fmt"
+	"sort"
 
 	"github.com/pkg/errors"
 )
@@ -83,6 +84,9 @@ func (w Workflow) Validate() (ExternalDependencies, error) {
 		}
 		extDep.Add(dep)
 	}
+	if err := w.Actions.ToGraph().DetectLoops(); err != nil {
+		return extDep, errors.WithMessagef(err, "can't validate actions")
+	}
 
 	// Validate keys
 	for kName, k := range w.Keys {
@@ -98,7 +102,7 @@ func (w Workflow) Validate() (ExternalDependencies, error) {
 		}
 	}
 	if err := w.Stages.ToGraph().DetectLoops(); err != nil {
-		return extDep, err
+		return extDep, errors.WithMessagef(err, "can't validate stages")
 	}
 
 	// Validate jobs
@@ -111,7 +115,7 @@ func (w Workflow) Validate() (ExternalDependencies, error) {
 	}
 	for _, g := range w.Jobs.ToGraphs() {
 		if err := g.DetectLoops(); err != nil {
-			return extDep, err
+			return extDep, errors.WithMessagef(err, "can't validate jobs")
 		}
 	}
 
@@ -195,14 +199,27 @@ type ExternalDependencies struct {
 }
 
 func (e *ExternalDependencies) Add(d ExternalDependencies) {
-	e.Repositories = append(e.Repositories, d.Repositories...)
-	e.Variables = append(e.Variables, d.Variables...)
-	e.Secrets = append(e.Secrets, d.Secrets...)
-	e.VCSServers = append(e.VCSServers, d.VCSServers...)
-	e.Actions = append(e.Actions, d.Actions...)
-	e.Integrations = append(e.Integrations, d.Integrations...)
-	e.SSHKeys = append(e.SSHKeys, d.SSHKeys...)
-	e.PGPKeys = append(e.PGPKeys, d.PGPKeys...)
+	e.Repositories = deduplicateStrings(append(e.Repositories, d.Repositories...))
+	e.Variables = deduplicateStrings(append(e.Variables, d.Variables...))
+	e.Secrets = deduplicateStrings(append(e.Secrets, d.Secrets...))
+	e.VCSServers = deduplicateStrings(append(e.VCSServers, d.VCSServers...))
+	e.Actions = deduplicateStrings(append(e.Actions, d.Actions...))
+	e.Integrations = deduplicateStrings(append(e.Integrations, d.Integrations...))
+	e.SSHKeys = deduplicateStrings(append(e.SSHKeys, d.SSHKeys...))
+	e.PGPKeys = deduplicateStrings(append(e.PGPKeys, d.PGPKeys...))
+}
+
+func deduplicateStrings(in []string) []string {
+	m := make(map[string]struct{})
+	for i := range in {
+		m[in[i]] = struct{}{}
+	}
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }
 
 type Condition struct {
@@ -274,7 +291,7 @@ func (g Graph) DetectLoops() error {
 		for _, n := range subGraph {
 			nodeNames = append(nodeNames, n.Name)
 		}
-		return fmt.Errorf("dependency loop detected for node(s): %q", nodeNames)
+		return fmt.Errorf("dependency loop detected for %q", nodeNames)
 	}
 
 	return subGraph.DetectLoops()

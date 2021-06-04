@@ -1,10 +1,23 @@
 package workflowv3
 
+import "strings"
+
 type Actions map[string]Action
 
 func (a Actions) ExistAction(actionName string) bool {
 	_, ok := a[actionName]
 	return ok
+}
+
+func (a Actions) ToGraph() Graph {
+	var res Graph
+	for aName, action := range a {
+		res = append(res, Node{
+			Name:      aName,
+			DependsOn: action.GetLocalDependencies(),
+		})
+	}
+	return res
 }
 
 type Action struct {
@@ -25,6 +38,18 @@ func (a Action) Validate(w Workflow) (ExternalDependencies, error) {
 	}
 
 	return extDep, nil
+}
+
+func (a Action) GetLocalDependencies() []string {
+	var res []string
+	for _, s := range a.Steps {
+		for sName := range s.StepCustom {
+			if !strings.HasPrefix(sName, "@") {
+				res = append(res, sName)
+			}
+		}
+	}
+	return res
 }
 
 type ActionParameter struct {

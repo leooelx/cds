@@ -16,8 +16,8 @@ func (h Hook) Validate(w Workflow) (ExternalDependencies, error) {
 
 	switch h.Type {
 	case "repoWebhook":
-		targetRepo := h.On
-		isExternal := targetRepo != strings.TrimPrefix(targetRepo, "@")
+		targetRepo := strings.TrimPrefix(h.On, "@")
+		isExternal := targetRepo != h.On
 		if isExternal {
 			extDep.Repositories = append(extDep.Repositories, targetRepo)
 		} else {
