@@ -1,7 +1,9 @@
 package workflowv3
 
 import (
+	"encoding/json"
 	"fmt"
+	"reflect"
 	"strings"
 
 	"github.com/ovh/cds/sdk/exportentities"
@@ -21,6 +23,80 @@ type Step struct {
 	Checkout                  *exportentities.StepCheckout         `json:"checkout,omitempty" yaml:"checkout,omitempty"`
 	InstallKey                *exportentities.StepInstallKey       `json:"installKey,omitempty" yaml:"installKey,omitempty"`
 	Deploy                    *exportentities.StepDeploy           `json:"deploy,omitempty" yaml:"deploy,omitempty"`
+}
+
+func (s Step) MarshalJSON() ([]byte, error) {
+	type StepAlias Step // prevent recursion
+	sa := StepAlias(s)
+
+	if sa.StepCustom == nil {
+		return json.Marshal(sa)
+	}
+
+	b, err := json.Marshal(sa)
+	if err != nil {
+		return nil, err
+	}
+
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(b, &m); err != nil {
+		return nil, err
+	}
+
+	for k, v := range sa.StepCustom {
+		// do not override builtin action key
+		if _, ok := m[k]; ok {
+			continue
+		}
+
+		b, err = json.Marshal(v)
+		if err != nil {
+			return nil, err
+		}
+		m[k] = b
+	}
+
+	return json.Marshal(m)
+}
+
+func (s *Step) UnmarshalJSON(data []byte) error {
+	type StepAlias Step // prevent recursion
+	var sa StepAlias
+	if err := json.Unmarshal(data, &sa); err != nil {
+		return err
+	}
+	*s = Step(sa)
+
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(data, &m); err != nil {
+		return err
+	}
+
+	jsonFields := make(map[string]struct{})
+
+	typ := reflect.TypeOf(s).Elem()
+	countFields := typ.NumField()
+	for i := 0; i < countFields; i++ {
+		jsonName := strings.Split(typ.Field(i).Tag.Get("json"), ",")[0]
+		if jsonName != "" {
+			jsonFields[jsonName] = struct{}{}
+		}
+	}
+
+	for k, v := range m {
+		if _, ok := jsonFields[k]; !ok {
+			var sp exportentities.StepParameters
+			if err := json.Unmarshal(v, &sp); err != nil {
+				return err
+			}
+			if s.StepCustom == nil {
+				s.StepCustom = make(exportentities.StepCustom)
+			}
+			s.StepCustom[k] = sp
+		}
+	}
+
+	return nil
 }
 
 type StepScript interface{}

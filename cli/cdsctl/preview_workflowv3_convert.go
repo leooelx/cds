@@ -1,7 +1,9 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"sort"
 	"strconv"
 
 	"gopkg.in/yaml.v2"
@@ -21,9 +23,24 @@ var workflowV3ConvertCmd = cli.Command{
 		{Name: _ProjectKey},
 		{Name: _WorkflowName},
 	},
+	Flags: []cli.Flag{
+		{
+			Name:  "full",
+			Type:  cli.FlagBool,
+			Usage: "Set the flag to export pipeline, application and environment content.",
+		},
+		{
+			Name:    "format",
+			Type:    cli.FlagString,
+			Usage:   "Specify export format (json or yaml)",
+			Default: "yaml",
+		},
+	},
 }
 
 func workflowV3ConvertRun(v cli.Values) error {
+	isFullExport := v.GetBool("full")
+
 	w, err := client.WorkflowGet(v.GetString(_ProjectKey), v.GetString(_WorkflowName), cdsclient.WithDeepPipelines())
 	if err != nil {
 		return err
@@ -31,11 +48,31 @@ func workflowV3ConvertRun(v cli.Values) error {
 
 	res := workflowv3.NewWorkflow()
 
-	convertApps(res.Variables, res.Secrets, res.Repositories, w)
-	convertEnvs(res.Variables, res.Secrets, w)
-	convertJobs(res.Jobs, res.Deployments, w, nil, nil, w.WorkflowData.Node)
+	if isFullExport {
+		convertApps(res.Variables, res.Secrets, res.Repositories, w)
+		convertEnvs(res.Variables, res.Secrets, w)
+	}
+	convertedNodes := make(map[int64]convertedJobs)
+	convertJobs(res.Jobs, res.Deployments, convertedNodes, w, nil, nil, w.WorkflowData.Node, isFullExport)
+	sort.Slice(w.WorkflowData.Joins, func(i, j int) bool { return w.WorkflowData.Joins[i].ID < w.WorkflowData.Joins[j].ID })
+	for _, j := range w.WorkflowData.Joins {
+		var dependsOn []string
+		for _, p := range j.JoinContext {
+			dependsOn = append(dependsOn, convertedNodes[p.ParentID].endJobNames...)
+		}
+		convertJobs(res.Jobs, res.Deployments, convertedNodes, w, dependsOn, nil, j, isFullExport)
+	}
 
-	buf, err := yaml.Marshal(res)
+	format := v.GetString("format")
+	var buf []byte
+	switch format {
+	case "yaml":
+		buf, err = yaml.Marshal(res)
+	case "json":
+		buf, err = json.Marshal(res)
+	default:
+		return fmt.Errorf("invalid given export format %q", format)
+	}
 	if err != nil {
 		return err
 	}
@@ -85,40 +122,43 @@ func convertEnvs(resVars map[string]workflowv3.Variable, resSecrets map[string]w
 	}
 }
 
-func convertJobs(resJobs map[string]workflowv3.Job, resDeployments map[string]workflowv3.Deployment, w *sdk.Workflow, dependsOn []string, parentNodeCondition *workflowv3.Condition, node sdk.Node) {
+func convertJobs(resJobs map[string]workflowv3.Job, resDeployments map[string]workflowv3.Deployment, convertedNodes map[int64]convertedJobs, w *sdk.Workflow, dependsOn []string, parentNodeCondition *workflowv3.Condition, node sdk.Node, isFullExport bool) {
 	if node.Type == sdk.NodeTypeOutGoingHook {
 		return
 	}
 
 	var currentNodeCondition *workflowv3.Condition
-	if node.Context.Conditions.LuaScript != "" || len(node.Context.Conditions.PlainConditions) > 0 {
-		currentNodeCondition = &workflowv3.Condition{Lua: node.Context.Conditions.LuaScript}
-		for _, c := range node.Context.Conditions.PlainConditions {
-			currentNodeCondition.Checks = append(currentNodeCondition.Checks, workflowv3.Check{
-				Variable: c.Variable,
-				Operator: c.Operator,
-				Value:    c.Value,
-			})
+	if isFullExport {
+		if node.Context.Conditions.LuaScript != "" || len(node.Context.Conditions.PlainConditions) > 0 {
+			currentNodeCondition = &workflowv3.Condition{Lua: node.Context.Conditions.LuaScript}
+			for _, c := range node.Context.Conditions.PlainConditions {
+				currentNodeCondition.Checks = append(currentNodeCondition.Checks, workflowv3.Check{
+					Variable: c.Variable,
+					Operator: c.Operator,
+					Value:    c.Value,
+				})
+			}
 		}
-	}
-	if parentNodeCondition != nil {
-		if currentNodeCondition != nil {
-			currentNodeCondition.Merge(*parentNodeCondition)
-		} else {
-			currentNodeCondition = parentNodeCondition
+		if parentNodeCondition != nil {
+			if currentNodeCondition != nil {
+				currentNodeCondition.Merge(*parentNodeCondition)
+			} else {
+				currentNodeCondition = parentNodeCondition
+			}
 		}
 	}
 
-	// For Join and Fork, keep condition then explore childs
+	// For Fork, keep condition then explore childs
 	if node.Type != sdk.NodeTypePipeline {
 		for _, t := range node.Triggers {
-			convertJobs(resJobs, resDeployments, w, dependsOn, currentNodeCondition, t.ChildNode)
+			convertJobs(resJobs, resDeployments, convertedNodes, w, dependsOn, currentNodeCondition, t.ChildNode, isFullExport)
 		}
 		return
 	}
 
 	// For Pipeline, create jobs list, add depends on and condition on start jobs
-	jobs := computeNodePipelineJobs(w, node.Context.PipelineID, node.Name)
+	jobs := computeNodePipelineJobs(w, node.Context.PipelineID, node.Name, isFullExport)
+	convertedNodes[node.ID] = jobs
 	if len(dependsOn) > 0 {
 		for _, sJob := range jobs.startJobs {
 			sJob.DependsOn = append(sJob.DependsOn, dependsOn...)
@@ -134,6 +174,11 @@ func convertJobs(resJobs map[string]workflowv3.Job, resDeployments map[string]wo
 	}
 
 	for jName, j := range jobs.allJobs {
+		if !isFullExport {
+			resJobs[jName] = *j
+			continue
+		}
+
 		// Convert pipeline context to job context
 		if node.Context.EnvironmentID > 0 {
 			// And env will be converted to variables map
@@ -191,7 +236,7 @@ func convertJobs(resJobs map[string]workflowv3.Job, resDeployments map[string]wo
 	}
 
 	for _, t := range node.Triggers {
-		convertJobs(resJobs, resDeployments, w, jobs.endJobNames, nil, t.ChildNode)
+		convertJobs(resJobs, resDeployments, convertedNodes, w, jobs.endJobNames, nil, t.ChildNode, isFullExport)
 	}
 }
 
@@ -201,7 +246,7 @@ type convertedJobs struct {
 	endJobNames []string
 }
 
-func computeNodePipelineJobs(w *sdk.Workflow, pipelineID int64, nodeName string) convertedJobs {
+func computeNodePipelineJobs(w *sdk.Workflow, pipelineID int64, nodeName string, isFullExport bool) convertedJobs {
 	pip := w.Pipelines[pipelineID]
 
 	res := convertedJobs{
@@ -217,7 +262,7 @@ func computeNodePipelineJobs(w *sdk.Workflow, pipelineID int64, nodeName string)
 		for _, j := range s.Jobs {
 			jName := slug.Convert(fmt.Sprintf("%s-%s-%s-%d", nodeName, s.Name, j.Action.Name, j.Action.ID))
 			stageJobNames = append(stageJobNames, jName)
-			newJob := workflowv3.ConvertJob(j)
+			newJob := workflowv3.ConvertJob(j, isFullExport)
 			if len(previousStagesJobNames) > 0 {
 				newJob.DependsOn = append(newJob.DependsOn, previousStagesJobNames...)
 			}

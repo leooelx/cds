@@ -25,7 +25,7 @@ type Stage struct {
 	Conditions *Condition `json:"conditions,omitempty" yaml:"conditions,omitempty"`
 }
 
-func (s Stage) Validate(w Workflow) error {
+func (s Stage) Validate(name string, w Workflow) error {
 	// Graph validation
 	if len(s.DependsOn) > 0 {
 		for _, d := range s.DependsOn {
@@ -33,6 +33,18 @@ func (s Stage) Validate(w Workflow) error {
 				return fmt.Errorf("depends on unknown stage %q", d)
 			}
 		}
+	}
+
+	// Check that there is at least one job in the stage
+	var hasJobs bool
+	for i := range w.Jobs {
+		if w.Jobs[i].Stage == name {
+			hasJobs = true
+			break
+		}
+	}
+	if !hasJobs {
+		return fmt.Errorf("should contains at least one job")
 	}
 
 	return nil

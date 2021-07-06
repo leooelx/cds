@@ -97,7 +97,7 @@ func (w Workflow) Validate() (ExternalDependencies, error) {
 
 	// Validate stages
 	for sName, s := range w.Stages {
-		if err := s.Validate(w); err != nil {
+		if err := s.Validate(sName, w); err != nil {
 			return extDep, errors.WithMessagef(err, "stage %q", sName)
 		}
 	}

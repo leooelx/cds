@@ -155,10 +155,14 @@ func (c ContextRaw) Parse() (bool, ContextType, string, error) {
 	return isExternal, contextType, splitted[1], contextType.Validate()
 }
 
-func ConvertJob(j sdk.Job) Job {
+func ConvertJob(j sdk.Job, isFullExport bool) Job {
 	jo := Job{}
 	if !j.Enabled {
 		jo.Enabled = &j.Enabled
+	}
+
+	if !isFullExport {
+		return jo
 	}
 
 	jo.Steps = make([]Step, len(j.Action.Actions))
