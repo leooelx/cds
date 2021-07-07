@@ -119,7 +119,6 @@ func (x *RunningStorageUnits) runItem(ctx context.Context, db *gorp.DbMap, dest 
 	if err != nil {
 		return err
 	}
-	iu.Item = item
 
 	// Check if the content (based on the locator) is already known from the destination unit
 	has, err := x.GetItemUnitByLocatorByUnit(iu.Locator, dest.ID(), iu.Type)
