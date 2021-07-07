@@ -23,7 +23,38 @@ func workflowArtifact() *cobra.Command {
 	return cli.NewCommand(workflowArtifactCmd, nil, []*cobra.Command{
 		cli.NewListCommand(workflowArtifactListCmd, workflowArtifactListRun, nil, withAllCommandModifiers()...),
 		cli.NewCommand(workflowArtifactDownloadCmd, workflowArtifactDownloadRun, nil, withAllCommandModifiers()...),
+		cli.NewCommand(workflowArtifactCDNMigrateCmd, workflowArtifactCDNMigrate, nil, withAllCommandModifiers()...),
 	})
+}
+
+var workflowArtifactCDNMigrateCmd = cli.Command{
+	Name:  "cdn-migrate",
+	Short: "Migrate artifact into CDN",
+	Ctx: []cli.Arg{
+		{Name: _ProjectKey},
+		{Name: _WorkflowName},
+	},
+	Args: []cli.Arg{
+		{Name: "number"},
+	},
+}
+
+func workflowArtifactCDNMigrate(v cli.Values) error {
+	number, err := strconv.ParseInt(v.GetString("number"), 10, 64)
+	if err != nil {
+		return cli.NewError("number parameter have to be an integer")
+	}
+
+	workflowArtifacts, err := client.WorkflowRunArtifacts(v.GetString(_ProjectKey), v.GetString(_WorkflowName), number)
+	if err != nil {
+		return err
+	}
+
+	for _, _ = range workflowArtifacts {
+		// Call cdn to migrate
+	}
+
+	return nil
 }
 
 var workflowArtifactListCmd = cli.Command{
