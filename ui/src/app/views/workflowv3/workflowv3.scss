@@ -1,0 +1,32 @@
+@import '../../../common';
+
+:host {
+    display: flex;
+    flex-direction: row;
+    height: 100%;
+}
+
+app-workflowv3-stages-graph {
+    flex: 2;
+    height: 100%;
+}
+
+.editor {
+    flex: 1;
+    height: 100%;
+    overflow: hidden;
+    min-width: 400px;
+}
+
+.grabber {
+    width: 9px;
+    cursor: col-resize;
+    background-color: $darkBackground;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+
+    i {
+        margin-left: 2px;
+    }
+}

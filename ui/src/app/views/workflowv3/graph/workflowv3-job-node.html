@@ -1,0 +1,10 @@
+<div class="node pointing" [class.highlight]="highlight" (mouseenter)="onMouseEnter()"
+    (mouseleave)="onMouseOut()">
+    <div class="title">
+        <div class="name ellipsis" title="{{node?.name}}">
+            <ng-container *ngIf="node?.name">
+                {{node?.name}}
+            </ng-container>
+        </div>
+    </div>
+</div>
