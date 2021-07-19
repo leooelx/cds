@@ -5,10 +5,10 @@ import (
 	"io/ioutil"
 	"net/http"
 
-	"github.com/ovh/cds/cli/cdsctl/workflowv3"
 	"github.com/ovh/cds/engine/service"
 	"github.com/ovh/cds/sdk"
 	"github.com/ovh/cds/sdk/exportentities"
+	"github.com/ovh/cds/sdk/workflowv3"
 )
 
 func (api *API) postWorkflowV3Validate() service.Handler {

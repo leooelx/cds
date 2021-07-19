@@ -12,7 +12,7 @@ import (
 	"gopkg.in/yaml.v2"
 
 	"github.com/ovh/cds/cli"
-	"github.com/ovh/cds/cli/cdsctl/workflowv3"
+	"github.com/ovh/cds/sdk/workflowv3"
 )
 
 var workflowV3ValidateCmd = cli.Command{
