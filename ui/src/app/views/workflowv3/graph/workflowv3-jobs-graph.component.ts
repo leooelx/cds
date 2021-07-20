@@ -102,7 +102,8 @@ export class WorkflowV3JobsGraphComponent implements AfterViewInit, OnDestroy {
             this.nodes.forEach(o => {
                 childCount += o.depends_on ? o.depends_on.filter(d => d === n.name).length : 0;
             });
-            this.graph.createNode(`${this.node.name}-${n.name}`, this.createJobNodeComponent(n), n.depends_on?.length > 0, childCount > 0, nodesWeight[n.name]);
+            this.graph.createNode(`${this.node.name}-${n.name}`, this.createJobNodeComponent(n), n.depends_on?.length > 0, childCount > 0,
+                nodesWeight[n.name], n.run ? n.run.status : null);
         });
 
         this.nodes.forEach(n => {

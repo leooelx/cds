@@ -98,7 +98,7 @@ func (api *API) getWorkflowV3Handler() service.Handler {
 			return sdk.WithStack(err)
 		}
 
-		res := workflowv3.Convert(&wk, full)
+		res := workflowv3.Convert(wk, full)
 
 		buf, err := exportentities.Marshal(res, f)
 		if err != nil {
@@ -109,6 +109,45 @@ func (api *API) getWorkflowV3Handler() service.Handler {
 		}
 
 		w.Header().Add("Content-Type", f.ContentType())
+		return nil
+	}
+}
+
+func (api *API) getWorkflowV3RunHandler() service.Handler {
+	return func(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
+		full := service.FormBool(r, "full")
+		format := FormString(r, "format")
+		if format == "" {
+			format = "yaml"
+		}
+		f, err := exportentities.GetFormat(format)
+		if err != nil {
+			return err
+		}
+
+		p := workflowv3ProxyWriter{header: make(http.Header)}
+
+		if err := api.getWorkflowRunHandler()(ctx, &p, r); err != nil {
+			return err
+		}
+
+		var wkr sdk.WorkflowRun
+		if err := json.Unmarshal(p.buf.Bytes(), &wkr); err != nil {
+			return sdk.WithStack(err)
+		}
+
+		res := workflowv3.ConvertRun(&wkr, full)
+
+		buf, err := exportentities.Marshal(res, f)
+		if err != nil {
+			return err
+		}
+		if _, err := w.Write(buf); err != nil {
+			return sdk.WithStack(err)
+		}
+
+		w.Header().Add("Content-Type", f.ContentType())
+
 		return nil
 	}
 }

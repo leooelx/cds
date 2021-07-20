@@ -30,6 +30,23 @@ export class PipelineStatus {
         return status === this.SUCCESS || status === this.STOPPED || status === this.FAIL ||
             status === this.SKIPPED || status === this.DISABLED;
     }
+
+    static priority = [
+        PipelineStatus.NEVER_BUILT, PipelineStatus.PENDING, PipelineStatus.WAITING,
+        PipelineStatus.BUILDING, PipelineStatus.SUCCESS, PipelineStatus.STOPPED,
+        PipelineStatus.FAIL, PipelineStatus.DISABLED, PipelineStatus.SKIPPED
+    ];
+
+    static sum(status: Array<string>): string {
+        const sum = status.map(s => PipelineStatus.priority.indexOf(s)).reduce((sum, num) => {
+            if (num > -1 && num < sum) { return num; }
+            return sum;
+        });
+        if (sum === -1) {
+            return null;
+        }
+        return PipelineStatus.priority[sum];
+    }
 }
 
 export class PipelineAudit {
@@ -221,7 +238,7 @@ export class CDNLine {
     extra: Array<string>;
 }
 
-export class CDNStreamFilter  {
+export class CDNStreamFilter {
     item_type: string;
     api_ref: string;
     offset: number;

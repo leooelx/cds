@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnDestroy } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnDestroy, OnInit } from '@angular/core';
+import { PipelineStatus } from 'app/model/pipeline.model';
 import { AutoUnsubscribe } from 'app/shared/decorator/autoUnsubscribe';
 import { GraphNode } from '../workflowv3.model';
 
@@ -9,18 +10,23 @@ import { GraphNode } from '../workflowv3.model';
     changeDetection: ChangeDetectionStrategy.OnPush
 })
 @AutoUnsubscribe()
-export class WorkflowV3ForkJoinNodeComponent implements OnDestroy {
+export class WorkflowV3ForkJoinNodeComponent implements OnInit, OnDestroy {
     @Input() nodes: Array<GraphNode>;
     @Input() type = 'fork';
     @Input() highlightCallback: any;
 
-
     highlight = false;
+    status: string;
+    pipelineStatusEnum = PipelineStatus;
 
     constructor(
         private _cd: ChangeDetectorRef
     ) {
         this.setHighlight.bind(this);
+    }
+
+    ngOnInit() {
+        this.status = PipelineStatus.sum(this.nodes.map(n => n.run ? n.run.status : null));
     }
 
     getNodes() { return this.nodes; }

@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnDestroy } from '@angular/core';
+import { PipelineStatus } from 'app/model/pipeline.model';
 import { AutoUnsubscribe } from 'app/shared/decorator/autoUnsubscribe';
 import { GraphNode } from '../workflowv3.model';
 
@@ -14,6 +15,7 @@ export class WorkflowV3JobNodeComponent implements OnDestroy {
     @Input() highlightCallback: any;
 
     highlight = false;
+    pipelineStatusEnum = PipelineStatus;
 
     constructor(
         private _cd: ChangeDetectorRef

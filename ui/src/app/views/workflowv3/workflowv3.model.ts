@@ -11,6 +11,17 @@ export class WorkflowV3 {
     jobs: { [name: string]: Job };
 }
 
+export class WorkflowRunV3 {
+    status: string;
+    workflow: WorkflowV3;
+    job_runs: { [name: string]: JobRun };
+}
+
+export class JobRun {
+    status: string;
+    sub_number: number;
+}
+
 export class Stage {
     depends_on: Array<string>;
     conditions: any;
@@ -31,6 +42,7 @@ export class GraphNode {
     name: string;
     depends_on: Array<string>;
     sub_graph: Array<GraphNode>;
+    run: JobRun;
 
     static ComputeWeight(graph: Array<GraphNode>): { [name: string]: number } {
         let f = (nodes: Array<GraphNode>, rank: number = 0): { [name: string]: number } => {

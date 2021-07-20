@@ -1,4 +1,5 @@
 import { ComponentRef } from '@angular/core';
+import { PipelineStatus } from 'app/model/pipeline.model';
 import * as d3 from 'd3';
 import * as dagreD3 from 'dagre-d3';
 import { GraphNode } from '../workflowv3.model';
@@ -51,8 +52,9 @@ export class WorkflowV3Graph<T extends WithHighlight> {
     componentFactory: ComponentFactory<T>;
     nodeOutNames: { [key: string]: string } = {};
     nodeInNames: { [key: string]: string } = {};
-    forks: { [key: string]: Array<string> } = {};
-    joins: { [key: string]: Array<string> } = {};
+    forks: { [key: string]: { parents: Array<string>, children: Array<string> } } = {};
+    joins: { [key: string]: { parents: Array<string>, children: Array<string> } } = {};
+    nodeStatus: { [key: string]: string } = {};
 
     constructor(
         factory: ComponentFactory<T>,
@@ -156,6 +158,8 @@ export class WorkflowV3Graph<T extends WithHighlight> {
 
         this.render(this.g, <any>this.graph);
 
+        this.drawNodesInOut();
+
         if (withZoom) {
             this.zoom = d3.zoom().scaleExtent([this.minScale, this.maxScale]).on('zoom', () => {
                 if (d3.event.transform && d3.event.transform.x && d3.event.transform.x !== Number.POSITIVE_INFINITY
@@ -226,26 +230,26 @@ export class WorkflowV3Graph<T extends WithHighlight> {
         });
     }
 
+    uniqueStrings(a: Array<string>): Array<string> {
+        let o = {};
+        a.forEach(s => o[s] = true);
+        return Object.keys(o);
+    }
+
     drawEdges(): void {
         let nodesChildren: { [key: string]: Array<string> } = {};
         let nodesParents: { [key: string]: Array<string> } = {};
-
-        let unique = (a: Array<string>): Array<string> => {
-            let o = {};
-            a.forEach(s => o[s] = true);
-            return Object.keys(o);
-        };
 
         this.edges.forEach(e => {
             if (!nodesChildren[e.from]) {
                 nodesChildren[e.from] = [e.to];
             } else {
-                nodesChildren[e.from] = unique([...nodesChildren[e.from], e.to]);
+                nodesChildren[e.from] = this.uniqueStrings([...nodesChildren[e.from], e.to]);
             }
             if (!nodesParents[e.to]) {
                 nodesParents[e.to] = [e.from];
             } else {
-                nodesParents[e.to] = unique([...nodesParents[e.to], e.from]);
+                nodesParents[e.to] = this.uniqueStrings([...nodesParents[e.to], e.from]);
             }
         });
 
@@ -254,27 +258,38 @@ export class WorkflowV3Graph<T extends WithHighlight> {
         this.nodeOutNames = {};
         Object.keys(nodesChildren).forEach(c => {
             if (nodesChildren[c].length > 1) {
-                let keyFork = nodesChildren[c].map(n => n.split('node-')[1]).sort().join('-');
+                const children = nodesChildren[c].map(n => n.split('node-')[1]).sort();
+                const keyFork = children.join('-');
                 if (this.forks[keyFork]) {
-                    this.forks[keyFork] = this.forks[keyFork].concat(c);
+                    this.forks[keyFork].parents = this.forks[keyFork].parents.concat(c);
+                    this.forks[keyFork].children = this.uniqueStrings(this.forks[keyFork].children.concat(nodesChildren[c]));
                 } else {
-                    this.forks[keyFork] = [c];
+                    this.forks[keyFork] = {
+                        parents: [c],
+                        children: nodesChildren[c]
+                    };
                 }
             }
         });
         Object.keys(this.forks).forEach(f => {
-            let nodes = this.forks[f].map(n => this.nodesComponent.get(n).instance.getNodes()).reduce((p, c) => p.concat(c));
+            let nodes = this.forks[f].parents.map(n => this.nodesComponent.get(n).instance.getNodes()).reduce((p, c) => p.concat(c));
             const componentRef = this.componentFactory(nodes, 'fork');
-            let nodeKeys = this.forks[f].map(n => n.split('node-')[1]).sort().join(' ');
+            let nodeKeys = this.forks[f].parents.map(n => n.split('node-')[1]).sort().join(' ');
             this.createGFork(f, componentRef, { class: `${nodeKeys}` });
-            this.forks[f].forEach(n => {
-                this.createGEdge(<Edge>{
+            this.nodeStatus[`fork-${f}`] = PipelineStatus.sum(nodes.map(n => n.run ? n.run.status : null));
+            this.forks[f].parents.forEach(n => {
+                let edge = <Edge>{
                     from: n,
                     to: `fork-${f}`,
                     options: {
                         class: `${f} ${n.split('node-')[1]}`
                     }
-                });
+                };
+                if (this.nodeStatus[`fork-${f}`]) {
+                    const color = this.nodeStatusToColor(this.nodeStatus[`fork-${f}`]);
+                    edge.options['style'] = `stroke: ${color};stroke-width: 2px;`;
+                }
+                this.createGEdge(edge);
                 this.nodeOutNames[n] = `fork-${f}`;
             });
         });
@@ -284,27 +299,38 @@ export class WorkflowV3Graph<T extends WithHighlight> {
         this.nodeInNames = {};
         Object.keys(nodesParents).forEach(p => {
             if (nodesParents[p].length > 1) {
-                let keyJoin = nodesParents[p].map(n => n.split('node-')[1]).sort().join('-');
+                const parents = nodesParents[p].map(n => n.split('node-')[1]).sort();
+                const keyJoin = parents.join('-');
                 if (this.joins[keyJoin]) {
-                    this.joins[keyJoin] = this.joins[keyJoin].concat(p);
+                    this.joins[keyJoin].children = this.joins[keyJoin].children.concat(p);
+                    this.joins[keyJoin].parents = this.uniqueStrings(this.joins[keyJoin].children.concat(nodesParents[p]));
                 } else {
-                    this.joins[keyJoin] = [p];
+                    this.joins[keyJoin] = {
+                        children: [p],
+                        parents: nodesParents[p]
+                    };
                 }
             }
         });
         Object.keys(this.joins).forEach(j => {
-            let nodes = this.joins[j].map(n => this.nodesComponent.get(n).instance.getNodes()).reduce((p, c) => p.concat(c));
+            let nodes = this.joins[j].parents.map(n => this.nodesComponent.get(n).instance.getNodes()).reduce((p, c) => p.concat(c));
             const componentRef = this.componentFactory(nodes, 'join');
-            let nodeKeys = this.joins[j].map(n => n.split('node-')[1]).sort().join(' ');
+            let nodeKeys = this.joins[j].children.map(n => n.split('node-')[1]).sort().join(' ');
             this.createGJoin(j, componentRef, { class: `${nodeKeys}` });
-            this.joins[j].forEach(n => {
-                this.createGEdge(<Edge>{
+            this.nodeStatus[`join-${j}`] = PipelineStatus.sum(nodes.map(n => n.run ? n.run.status : null));
+            this.joins[j].children.forEach(n => {
+                let edge = <Edge>{
                     from: `join-${j}`,
                     to: n,
                     options: {
                         class: `${j} ${n.split('node-')[1]}`
                     }
-                });
+                };
+                if (this.nodeStatus[`join-${j}`]) {
+                    const color = this.nodeStatusToColor(this.nodeStatus[`join-${j}`]);
+                    edge.options['style'] = `stroke: ${color};stroke-width: 2px;`;
+                }
+                this.createGEdge(edge);
                 this.nodeInNames[n] = `join-${j}`;
             });
         });
@@ -321,24 +347,85 @@ export class WorkflowV3Graph<T extends WithHighlight> {
                 uniqueEdges[edgeKey] = { from, to, classes: [nodeKeyFrom, nodeKeyTo], weight: toNodeWeight };
                 return;
             }
-            uniqueEdges[edgeKey].classes = unique(uniqueEdges[edgeKey].classes.concat(nodeKeyFrom, nodeKeyTo));
+            uniqueEdges[edgeKey].classes = this.uniqueStrings(uniqueEdges[edgeKey].classes.concat(nodeKeyFrom, nodeKeyTo));
             uniqueEdges[edgeKey].weight = Math.max(toNodeWeight, uniqueEdges[edgeKey].weight);
         });
 
         Object.keys(uniqueEdges).forEach(edgeKey => {
             let e = uniqueEdges[edgeKey];
+            let options = {
+                class: e.classes.join(' '),
+                weight: e.weight
+            };
+            if (this.nodeStatus[e.from]) {
+                const color = this.nodeStatusToColor(this.nodeStatus[e.from]);
+                options['style'] = `stroke: ${color};stroke-width: 2px;`;
+            }
             this.createGEdge(<Edge>{
-                from: e.from, to: e.to, options: {
-                    class: e.classes.join(' '),
-                    weight: e.weight
-                }
+                from: e.from, to: e.to, options
             });
         });
     }
 
-    createNode(key: string, componentRef: ComponentRef<T>, hasParent: boolean, hasChild: boolean, weight: number, width: number = 180, height: number = 60): void {
+    drawNodesInOut(): void {
+        this.nodes.forEach(n => {
+            const nodeName = `node-${n.key}`;
+
+            // If input is a join set color from join status, else find the parent for the node to get its status.
+            let colorIn: string;
+            if (this.nodeInNames[nodeName] && this.nodeInNames[nodeName] !== nodeName) {
+                if (this.nodeStatus[this.nodeInNames[nodeName]]) {
+                    colorIn = this.nodeStatusToColor(this.nodeStatus[this.nodeInNames[nodeName]]);
+                }
+            } else {
+                const edge = this.edges.find(e => e.to === nodeName);
+                if (edge) {
+                    let edgeFrom = this.nodeOutNames[edge.from] ?? edge.from;
+                    if (this.nodeStatus[edgeFrom]) {
+                        colorIn = this.nodeStatusToColor(this.nodeStatus[edgeFrom]);
+                    }
+                }
+            }
+            if (colorIn) {
+                let selectionNodesInLines = d3.selectAll(`.${n.key} > line.in`);
+                if (selectionNodesInLines.size() > 0) {
+                    selectionNodesInLines.style('stroke', colorIn);
+                }
+            }
+
+            if (this.nodeStatus[`node-${n.key}`]) {
+                const colorOut = this.nodeStatusToColor(this.nodeStatus[`node-${n.key}`]);
+                let selectionNodesOutLines = d3.selectAll(`.${n.key} > line.out`);
+                if (selectionNodesOutLines.size() > 0) {
+                    selectionNodesOutLines.style('stroke', colorOut);
+                }
+            }
+        });
+    }
+
+    nodeStatusToColor(s: string): string {
+        switch (s) {
+            case PipelineStatus.SUCCESS:
+                return '#007611';
+            case PipelineStatus.FAIL:
+                return '#e42805';
+            case PipelineStatus.WAITING:
+            case PipelineStatus.BUILDING:
+            case PipelineStatus.PENDING:
+            case PipelineStatus.NEVER_BUILT:
+            case PipelineStatus.STOPPED:
+                return '#a2a3a3';
+            default:
+                return '#808080';
+        }
+    }
+
+    createNode(key: string, componentRef: ComponentRef<T>, hasParent: boolean, hasChild: boolean, weight: number, status: string, width: number = 180, height: number = 60): void {
         this.nodes.push(<Node>{ key, hasParent, hasChild, weight, width, height });
         this.nodesComponent.set(`node-${key}`, componentRef);
+        if (status) {
+            this.nodeStatus[`node-${key}`] = status;
+        }
     }
 
     createGNode(name: string, componentRef: ComponentRef<T>, width: number, height: number, options: {}): void {
@@ -386,27 +473,31 @@ export class WorkflowV3Graph<T extends WithHighlight> {
     highlightNode(active: boolean, key: string) {
         let selectionEdges = d3.selectAll(`.${key} > .path`);
         if (selectionEdges.size() > 0) {
-            selectionEdges.style('stroke', active ? '#FFFFFF' : '#B5B7BD');
+            selectionEdges.attr('class', active ? 'path highlight' : 'path');
         }
-        let selectionNodesLines = d3.selectAll(`.${key} > line`);
-        if (selectionNodesLines.size() > 0) {
-            selectionNodesLines.style('stroke', active ? '#FFFFFF' : '#B5B7BD');
+        let selectionNodesInLines = d3.selectAll(`.${key} > line.in`);
+        if (selectionNodesInLines.size() > 0) {
+            selectionNodesInLines.attr('class', active ? 'in highlight' : 'in');
+        }
+        let selectionNodesOutLines = d3.selectAll(`.${key} > line.out`);
+        if (selectionNodesOutLines.size() > 0) {
+            selectionNodesOutLines.attr('class', active ? 'out highlight' : 'out');
         }
 
         let from = this.nodeOutNames[`node-${key}`] ?? `node-${key}`;
         this.graph.edges().filter(e => e.v === from).forEach(e => {
             let nodeKeys: Array<string>;
             if (e.w.startsWith('fork-')) {
-                nodeKeys = this.forks[e.w.split('fork-')[1]];
+                nodeKeys = this.forks[e.w.split('fork-')[1]].parents;
             } else if (e.w.startsWith('join-')) {
-                nodeKeys = this.joins[e.w.split('join-')[1]];
+                nodeKeys = this.joins[e.w.split('join-')[1]].parents;
             } else {
                 nodeKeys = [e.w.split('node-')[1]];
             }
             nodeKeys.forEach(nodeKey => {
                 let selectionNodesInLines = d3.selectAll(`.${nodeKey} > line.in`);
                 if (selectionNodesInLines.size() > 0) {
-                    selectionNodesInLines.style('stroke', active ? '#FFFFFF' : '#B5B7BD');
+                    selectionNodesInLines.attr('class', active ? 'in highlight' : 'in');
                 }
             });
         });
@@ -414,16 +505,16 @@ export class WorkflowV3Graph<T extends WithHighlight> {
         this.graph.edges().filter(e => e.w === to).forEach(e => {
             let nodeKeys: Array<string>;
             if (e.v.startsWith('fork-')) {
-                nodeKeys = this.forks[e.v.split('fork-')[1]];
+                nodeKeys = this.forks[e.v.split('fork-')[1]].children;
             } else if (e.v.startsWith('join-')) {
-                nodeKeys = this.joins[e.v.split('join-')[1]];
+                nodeKeys = this.joins[e.v.split('join-')[1]].children;
             } else {
                 nodeKeys = [e.v.split('node-')[1]];
             }
             nodeKeys.forEach(nodeKey => {
                 let selectionNodesInLines = d3.selectAll(`.${nodeKey} > line.out`);
                 if (selectionNodesInLines.size() > 0) {
-                    selectionNodesInLines.style('stroke', active ? '#FFFFFF' : '#B5B7BD');
+                    selectionNodesInLines.attr('class', active ? 'out highlight' : 'out');
                 }
             });
         });

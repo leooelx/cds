@@ -10,7 +10,7 @@ import (
 	"github.com/ovh/cds/sdk/slug"
 )
 
-func Convert(w *sdk.Workflow, isFullExport bool) Workflow {
+func Convert(w sdk.Workflow, isFullExport bool) Workflow {
 	res := NewWorkflow()
 
 	if isFullExport {
@@ -31,7 +31,7 @@ func Convert(w *sdk.Workflow, isFullExport bool) Workflow {
 	return res
 }
 
-func convertApps(resVars map[string]Variable, resSecrets map[string]Secret, resRepos map[string]Repository, w *sdk.Workflow) {
+func convertApps(resVars map[string]Variable, resSecrets map[string]Secret, resRepos map[string]Repository, w sdk.Workflow) {
 	for _, a := range w.Applications {
 		if a.RepositoryStrategy.ConnectionType != "" {
 			resRepos[slug.Convert(a.Name)] = Repository{
@@ -56,7 +56,7 @@ func convertApps(resVars map[string]Variable, resSecrets map[string]Secret, resR
 	}
 }
 
-func convertEnvs(resVars map[string]Variable, resSecrets map[string]Secret, w *sdk.Workflow) {
+func convertEnvs(resVars map[string]Variable, resSecrets map[string]Secret, w sdk.Workflow) {
 	for _, e := range w.Environments {
 		variables := make(map[string]interface{})
 		for _, va := range e.Variables {
@@ -72,7 +72,7 @@ func convertEnvs(resVars map[string]Variable, resSecrets map[string]Secret, w *s
 	}
 }
 
-func convertJobs(resJobs map[string]Job, resDeployments map[string]Deployment, convertedNodes map[int64]convertedJobs, w *sdk.Workflow, dependsOn []string, parentNodeCondition *Condition, node sdk.Node, isFullExport bool) {
+func convertJobs(resJobs map[string]Job, resDeployments map[string]Deployment, convertedNodes map[int64]convertedJobs, w sdk.Workflow, dependsOn []string, parentNodeCondition *Condition, node sdk.Node, isFullExport bool) {
 	if node.Type == sdk.NodeTypeOutGoingHook {
 		return
 	}
@@ -196,7 +196,7 @@ type convertedJobs struct {
 	endJobNames []string
 }
 
-func computeNodePipelineJobs(w *sdk.Workflow, pipelineID int64, nodeName string, isFullExport bool) convertedJobs {
+func computeNodePipelineJobs(w sdk.Workflow, pipelineID int64, nodeName string, isFullExport bool) convertedJobs {
 	pip := w.Pipelines[pipelineID]
 
 	res := convertedJobs{

@@ -41,7 +41,7 @@ func workflowV3ConvertRun(v cli.Values) error {
 		return err
 	}
 
-	res := workflowv3.Convert(w, isFullExport)
+	res := workflowv3.Convert(*w, isFullExport)
 
 	format := v.GetString("format")
 	var buf []byte

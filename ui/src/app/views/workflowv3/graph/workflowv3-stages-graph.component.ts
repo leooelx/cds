@@ -12,7 +12,7 @@ import {
     ViewContainerRef
 } from '@angular/core';
 import { AutoUnsubscribe } from 'app/shared/decorator/autoUnsubscribe';
-import { GraphNode, WorkflowV3 } from '../workflowv3.model';
+import { GraphNode, JobRun, WorkflowRunV3, WorkflowV3 } from '../workflowv3.model';
 import { WorkflowV3ForkJoinNodeComponent } from './workflowv3-fork-join-node.components';
 import { GraphDirection, WorkflowV3Graph } from './workflowv3-graph.lib';
 import { WorkflowV3JobNodeComponent } from './workflowv3-job-node.component';
@@ -44,6 +44,9 @@ export class WorkflowV3StagesGraphComponent implements AfterViewInit, OnDestroy 
             Object.keys(data.jobs).forEach(k => {
                 let j = data.jobs[k];
                 let node = <GraphNode>{ name: k, depends_on: j.depends_on };
+                if (this.jobRuns[k]) {
+                    node.run = this.jobRuns[k][0];
+                }
                 if (j.stage) {
                     for (let i = 0; i < this.nodes.length; i++) {
                         if (this.nodes[i].name === j.stage) {
@@ -57,6 +60,15 @@ export class WorkflowV3StagesGraphComponent implements AfterViewInit, OnDestroy 
             });
         }
         this.changeDisplay();
+    }
+
+    jobRuns: { [name: string]: JobRun } = {};
+    @Input() set workflowRun(data: WorkflowRunV3) {
+        if (!data) {
+            return;
+        }
+        this.jobRuns = data.job_runs;
+        this.workflow = data.workflow;
     }
 
     direction: GraphDirection = GraphDirection.HORIZONTAL;
@@ -121,9 +133,11 @@ export class WorkflowV3StagesGraphComponent implements AfterViewInit, OnDestroy 
             });
 
             if (this.hasStages) {
-                this.graph.createNode(n.name, this.createSubGraphComponent(n), n.depends_on?.length > 0, childCount > 0, nodesWeight[n.name], 300, 169);
+                this.graph.createNode(n.name, this.createSubGraphComponent(n), n.depends_on?.length > 0, childCount > 0,
+                    nodesWeight[n.name], null, 300, 169);
             } else {
-                this.graph.createNode(n.name, this.createJobNodeComponent(n), n.depends_on?.length > 0, childCount > 0, nodesWeight[n.name]);
+                this.graph.createNode(n.name, this.createJobNodeComponent(n), n.depends_on?.length > 0, childCount > 0,
+                    nodesWeight[n.name], n.run ? n.run.status : null);
             }
         });
 
