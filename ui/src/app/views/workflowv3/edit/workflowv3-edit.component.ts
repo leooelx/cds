@@ -1,19 +1,18 @@
-import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
 import { ChangeDetectorRef, EventEmitter } from '@angular/core';
 import {
     ChangeDetectionStrategy,
     Component,
-    Input,
     OnDestroy,
     OnInit,
     Output,
     ViewChild
 } from '@angular/core';
-import { Project } from 'app/model/project.model';
+import { ActivatedRoute } from '@angular/router';
 import { ThemeStore } from 'app/service/theme/theme.store';
 import { AutoUnsubscribe } from 'app/shared/decorator/autoUnsubscribe';
-import { Observable, Subject, Subscription, throwError, timer } from 'rxjs';
-import { catchError, concatMap, debounce, tap } from 'rxjs/operators';
+import { EMPTY, Observable, Subject, Subscription, timer } from 'rxjs';
+import { catchError, concatMap, debounce, finalize, tap } from 'rxjs/operators';
 import { WorkflowV3, WorkflowV3ValidationResponse } from '../workflowv3.model';
 
 @Component({
@@ -27,10 +26,9 @@ export class WorkflowV3EditComponent implements OnInit, OnDestroy {
     @ViewChild('codeMirror') codemirror: any;
     codeMirrorConfig: any;
 
-    @Input() project: Project;
-
     @Output() onChange = new EventEmitter<WorkflowV3>();
 
+    paramsRouteSubscription: Subscription;
     workflowYaml = '';
     themeSubscription: Subscription;
     workflowYamlSubject = new Subject<string>();
@@ -41,7 +39,8 @@ export class WorkflowV3EditComponent implements OnInit, OnDestroy {
     constructor(
         private _theme: ThemeStore,
         private _http: HttpClient,
-        private _cd: ChangeDetectorRef
+        private _cd: ChangeDetectorRef,
+        private _activatedRoute: ActivatedRoute
     ) {
         this.codeMirrorConfig = {
             mode: 'text/x-yaml',
@@ -66,6 +65,11 @@ export class WorkflowV3EditComponent implements OnInit, OnDestroy {
                 this.codemirror.instance.setOption('theme', this.codeMirrorConfig.theme);
             }
         });
+
+        const params = this._activatedRoute.snapshot.params;
+        const projectKey = params['key'];
+        const workflowName = params['workflowName'];
+
         this.workflowYamlSubject
             .pipe(
                 tap(() => {
@@ -76,9 +80,15 @@ export class WorkflowV3EditComponent implements OnInit, OnDestroy {
                 concatMap(data => {
                     this.loading = true;
                     this._cd.markForCheck();
-                    return this.validate(this.project.key, data);
+                    return this.validate(projectKey, data);
                 }),
-                catchError(err => throwError(err))
+                catchError(err => {
+                    this.writing = false;
+                    this.loading = false;
+                    this.errorMessage = null;
+                    this._cd.markForCheck();
+                    return EMPTY;
+                })
             )
             .subscribe(r => {
                 this.writing = false;
@@ -92,17 +102,33 @@ export class WorkflowV3EditComponent implements OnInit, OnDestroy {
                 this._cd.markForCheck();
                 this.onChange.emit(r.workflow);
             });
+
+        this.loading = true;
+        this._cd.markForCheck();
+        this.getWorkflow(projectKey, workflowName)
+            .pipe(finalize(() => {
+                this.loading = false;
+                this._cd.markForCheck();
+            }))
+            .subscribe(w => {
+                this.workflowYaml = w;
+                this.workflowYamlChange(w);
+            });
     }
 
     workflowYamlChange(data: string) {
-        if (!this.project) {
-            return;
-        }
         this.workflowYamlSubject.next(data);
     }
 
     validate(projectKey: string, workflowYaml: string): Observable<WorkflowV3ValidationResponse> {
         let headers = (new HttpHeaders()).append('Content-Type', 'application/x-yaml');
         return this._http.post<WorkflowV3ValidationResponse>(`/project/${projectKey}/workflowv3/validate`, workflowYaml, { headers });
+    }
+
+    getWorkflow(projectKey: string, workflowName: string): Observable<string> {
+        let params = new HttpParams();
+        params = params.append('format', 'yaml');
+        params = params.append('full', 'true');
+        return this._http.get<string>(`/project/${projectKey}/workflowv3/${workflowName}`, { params, responseType: <any>'text' });
     }
 }

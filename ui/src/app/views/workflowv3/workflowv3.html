@@ -1,9 +1,1 @@
-<app-workflowv3-stages-graph [workflow]="data" [direction]="direction" #graph></app-workflowv3-stages-graph>
-<div class="grabber" (mousedown)="onMouseDownGrabber()" #grabber>
-    <i class="ellipsis vertical icon"></i>
-</div>
-<div class="editor" #editor>
-    <app-workflowv3-edit [project]="project" (onChange)="workflowEdit($event)"
-        [ngClass]="{'visible animated fadeInRight': open}">
-    </app-workflowv3-edit>
-</div>
+<router-outlet></router-outlet>

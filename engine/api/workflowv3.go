@@ -1,9 +1,12 @@
 package api
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 
 	"github.com/ovh/cds/engine/service"
 	"github.com/ovh/cds/sdk"
@@ -11,7 +14,7 @@ import (
 	"github.com/ovh/cds/sdk/workflowv3"
 )
 
-func (api *API) postWorkflowV3Validate() service.Handler {
+func (api *API) postWorkflowV3ValidateHandler() service.Handler {
 	return func(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 		body, err := ioutil.ReadAll(r.Body)
 		if err != nil {
@@ -19,12 +22,7 @@ func (api *API) postWorkflowV3Validate() service.Handler {
 		}
 		defer r.Body.Close()
 
-		res := struct {
-			Valid                bool                            `json:"valid,omitempty"`
-			Error                string                          `json:"error,omitempty"`
-			Workflow             workflowv3.Workflow             `json:"workflow,omitempty"`
-			ExternalDependencies workflowv3.ExternalDependencies `json:"external_dependencies,omitempty"`
-		}{}
+		var res workflowv3.ValidationResponse
 
 		contentType := r.Header.Get("Content-Type")
 		if contentType == "" {
@@ -48,9 +46,69 @@ func (api *API) postWorkflowV3Validate() service.Handler {
 		extDep, err := workflow.Validate()
 
 		res.Valid = err == nil
-		res.Error = sdk.ExtractHTTPError(sdk.NewErrorFrom(sdk.ErrWrongRequest, "invalid workflow v3 format: %v", err)).Error()
+		if err != nil {
+			res.Error = sdk.ExtractHTTPError(sdk.NewErrorFrom(sdk.ErrWrongRequest, "invalid workflow v3 format: %v", err)).Error()
+		}
 		res.ExternalDependencies = extDep
 
 		return service.WriteJSON(w, res, http.StatusOK)
+	}
+}
+
+type workflowv3ProxyWriter struct {
+	header     http.Header
+	buf        bytes.Buffer
+	statusCode int
+}
+
+func (w *workflowv3ProxyWriter) Header() http.Header {
+	return w.header
+}
+
+func (w *workflowv3ProxyWriter) Write(bs []byte) (int, error) {
+	return w.buf.Write(bs)
+}
+
+func (w *workflowv3ProxyWriter) WriteHeader(statusCode int) {
+	w.statusCode = statusCode
+}
+
+func (api *API) getWorkflowV3Handler() service.Handler {
+	return func(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
+		full := service.FormBool(r, "full")
+		format := FormString(r, "format")
+		if format == "" {
+			format = "yaml"
+		}
+		f, err := exportentities.GetFormat(format)
+		if err != nil {
+			return err
+		}
+
+		p := workflowv3ProxyWriter{header: make(http.Header)}
+
+		r.Form = url.Values{}
+		r.Form.Add("withDeepPipelines", "true")
+		if err := api.getWorkflowHandler()(ctx, &p, r); err != nil {
+			return err
+		}
+
+		var wk sdk.Workflow
+		if err := json.Unmarshal(p.buf.Bytes(), &wk); err != nil {
+			return sdk.WithStack(err)
+		}
+
+		res := workflowv3.Convert(&wk, full)
+
+		buf, err := exportentities.Marshal(res, f)
+		if err != nil {
+			return err
+		}
+		if _, err := w.Write(buf); err != nil {
+			return sdk.WithStack(err)
+		}
+
+		w.Header().Add("Content-Type", f.ContentType())
+		return nil
 	}
 }

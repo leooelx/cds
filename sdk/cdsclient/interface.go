@@ -357,6 +357,10 @@ type WorkflowClient interface {
 	WorkflowTransformAsCode(projectKey, workflowName, branch, message string) (*sdk.Operation, error)
 }
 
+type WorkflowV3Client interface {
+	WorkflowV3Get(projectKey string, workflowName string, opts ...RequestModifier) ([]byte, error)
+}
+
 // MonitoringClient exposes monitoring functions
 type MonitoringClient interface {
 	MonStatus() (*sdk.MonitoringStatus, error)
@@ -407,6 +411,7 @@ type Interface interface {
 	UserClient
 	WorkerClient
 	WorkflowClient
+	WorkflowV3Client
 	MonitoringClient
 	HookClient
 	Version() (*sdk.Version, error)
@@ -546,6 +551,15 @@ func WithDeepPipelines() RequestModifier {
 	return func(r *http.Request) {
 		q := r.URL.Query()
 		q.Set("withDeepPipelines", "true")
+		r.URL.RawQuery = q.Encode()
+	}
+}
+
+// Full allows to get job details on a workflow v3.
+func Full() RequestModifier {
+	return func(r *http.Request) {
+		q := r.URL.Query()
+		q.Set("full", "true")
 		r.URL.RawQuery = q.Encode()
 	}
 }

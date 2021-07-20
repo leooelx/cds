@@ -1,0 +1,8 @@
+<app-workflowv3-stages-graph [workflow]="data" [direction]="direction" #graph></app-workflowv3-stages-graph>
+<div class="grabber" (mousedown)="onMouseDownGrabber()" #grabber>
+    <i class="ellipsis vertical icon"></i>
+</div>
+<div class="editor" #editor>
+    <app-workflowv3-edit (onChange)="workflowEdit($event)">
+    </app-workflowv3-edit>
+</div>
