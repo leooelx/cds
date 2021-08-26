@@ -6,7 +6,7 @@
 
 <img align="right" src="https://raw.githubusercontent.com/ovh/cds/master/logo-background.png" width="25%">
 
-CDS is an Enterprise-Grade Continuous Delivery & DevOps Automation Platform written in Go(lang)..
+CDS is an Enterprise-Grade Continuous Delivery & DevOps Automation Platform written in Go(lang).
 
 **This project is under active development**
 
