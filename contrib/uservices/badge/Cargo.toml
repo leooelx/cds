@@ -20,7 +20,7 @@ log = "0.4"
 env_logger = "0.5.13"
 # Database code
 uuid = { version = "0.5", features = ["serde", "v4"] }
-diesel = { version = "1.4.2", features = ["postgres", "r2d2"] }
+diesel = { version = "1.4.6", features = ["postgres", "r2d2"] }
 diesel_migrations= "1.1.0"
 r2d2 = "0.8"
 badge = "0.2.0"
