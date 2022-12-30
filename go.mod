@@ -13,7 +13,7 @@ require (
 	github.com/Shopify/sarama v1.27.0
 	github.com/alecthomas/jsonschema v0.0.0-20200123075451-43663a393755
 	github.com/andygrunwald/go-gerrit v0.0.0-20181207071854-19ef3e9332a4
-	github.com/aws/aws-sdk-go v1.19.11
+	github.com/aws/aws-sdk-go v1.33.0
 	github.com/blang/semver v3.5.1+incompatible
 	github.com/bmizerany/assert v0.0.0-20160611221934-b7ed37b82869
 	github.com/buger/goterm v0.0.0-20170918171949-d443b9114f9c
@@ -40,7 +40,6 @@ require (
 	github.com/gin-gonic/gin v1.3.0
 	github.com/go-gorp/gorp v2.0.0+incompatible
 	github.com/go-redis/redis v6.15.2+incompatible
-	github.com/go-sql-driver/mysql v1.4.1 // indirect
 	github.com/golang/mock v1.4.4
 	github.com/golang/protobuf v1.5.0
 	github.com/googleapis/gnostic v0.1.0 // indirect
@@ -96,7 +95,7 @@ require (
 	github.com/pelletier/go-toml v1.8.0
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
 	github.com/pkg/browser v0.0.0-20170505125900-c90ca0c84f15
-	github.com/pkg/errors v0.8.1
+	github.com/pkg/errors v0.9.1
 	github.com/poy/onpar v0.0.0-20190519213022-ee068f8ea4d1 // indirect
 	github.com/pquerna/cachecontrol v0.0.0-20200819021114-67c6ae64274f // indirect
 	github.com/prometheus/client_golang v1.1.0 // indirect
